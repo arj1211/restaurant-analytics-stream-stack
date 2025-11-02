@@ -3,21 +3,21 @@
 # =============================================================================
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.11.0
+  image: apache/airflow:2.9.3
   user: "${AIRFLOW_UID:-50000}:0"
-  environment: &airflow-common-env # Core Airflow settings
+  env_file:
+    - .env
+  environment:
+    # Core Airflow settings
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "${AIRFLOW_LOAD_EXAMPLES:-false}"
     AIRFLOW__CORE__PARALLELISM: "${AIRFLOW_PARALLELISM:-16}"
     AIRFLOW__CORE__DAG_CONCURRENCY: "${AIRFLOW_DAG_CONCURRENCY:-8}"
     AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "${AIRFLOW_MAX_ACTIVE_RUNS_PER_DAG:-1}"
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
-    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
-    _PIP_ADDITIONAL_REQUIREMENTS: ""
 
     # Database connection for Airflow metadata
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB_NAME}"
-    AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS: "true"
+    AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS: "false"
 
     # Application configuration
     RESTAURANT_API_URL: "${RESTAURANT_API_URL}"
@@ -31,6 +31,8 @@ x-airflow-common: &airflow-common
   depends_on:
     postgres:
       condition: service_healthy
+    db-init:
+      condition: service_completed_successfully
 
 services:
   # =============================================================================
@@ -57,7 +59,7 @@ services:
       TZ: ${TZ:-UTC}
       PGTZ: ${TZ:-UTC}
     volumes:
-      # - ${POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
       - ./sql:/docker-entrypoint-initdb.d:ro
     ports:
       - "${POSTGRES_EXTERNAL_PORT:-5432}:5432"
@@ -66,8 +68,6 @@ services:
         [
           "CMD-SHELL",
           "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB}",
-          "pg_isready -U ${RESTAURANT_DB_USER} -d ${RESTAURANT_DB_NAME}",
-          "pg_isready -U ${AIRFLOW_DB_USER} -d ${AIRFLOW_DB_NAME}",
         ]
       interval: 10s
       timeout: 5s
@@ -94,6 +94,47 @@ services:
     restart: unless-stopped
 
   # =============================================================================
+  # DATA VISUALIZATION SERVICE
+  # =============================================================================
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase-analytics
+    environment:
+      # Use PostgreSQL for Metabase metadata instead of H2
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${AIRFLOW_DB_NAME} # Share with Airflow for simplicity
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${ANALYTICS_READONLY_USER}
+      MB_DB_PASS: ${ANALYTICS_READONLY_PASSWORD}
+      MB_DB_HOST: postgres
+
+      # Additional configuration
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
+      MB_EMAIL_SMTP_HOST: ""
+      MB_EMAIL_SMTP_PORT: ""
+    volumes:
+      - ${METABASE_DATA_PATH:-./data/metabase}:/metabase-data
+    ports:
+      - "${METABASE_EXTERNAL_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # db-init:
+      #   condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # =============================================================================
+  # DATABASE INITIALIZATION SERVICE
+  # =============================================================================
+
+  # =============================================================================
   # AIRFLOW SERVICES
   # =============================================================================
 
@@ -104,22 +145,24 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # db-init:
+      #   condition: service_completed_successfully
     entrypoint: []
     command: >
       bash -lc "
       echo 'Waiting for Postgres...' &&
       until pg_isready -h postgres -p 5432 -U ${AIRFLOW_DB_USER}; do sleep 2; done &&
       echo 'Initializing Airflow DB...' &&
-      airflow db migrate #&&
-      # airflow connections create-default-connections || true &&
-      # echo 'Creating admin user (idempotent if already exists)...' &&
-      # airflow users create --username '${AIRFLOW_ADMIN_USER}' --password '${AIRFLOW_ADMIN_PASSWORD}' --firstname '${AIRFLOW_ADMIN_FIRSTNAME}' --lastname '${AIRFLOW_ADMIN_LASTNAME}' --role 'Admin' --email '${AIRFLOW_ADMIN_EMAIL}' || true &&
-      # echo 'Creating Airflow Variable restaurant_stream_offset...' &&
-      # airflow variables set restaurant_stream_offset 0 &&
-      # echo 'Creating Airflow Connection postgres_restaurant...' &&
-      # airflow connections add 'postgres_restaurant' --conn-type postgres --conn-host postgres --conn-schema ${RESTAURANT_DB_NAME} --conn-login ${AIRFLOW_DB_USER} --conn-password ${AIRFLOW_DB_PASSWORD} --conn-port 5432 || true &&
-      # echo 'Creating Airflow Connection postgres_analytics_readonly...' &&
-      # airflow connections add 'postgres_analytics_readonly' --conn-type postgres --conn-host postgres --conn-schema ${RESTAURANT_DB_NAME} --conn-login ${ANALYTICS_READONLY_USER} --conn-password ${ANALYTICS_READONLY_PASSWORD} --conn-port 5432 || true
+      airflow db migrate &&
+      airflow connections create-default-connections || true &&
+      echo 'Creating admin user (idempotent if already exists)...' &&
+      airflow users create --username '${AIRFLOW_ADMIN_USER}' --password '${AIRFLOW_ADMIN_PASSWORD}' --firstname '${AIRFLOW_ADMIN_FIRSTNAME}' --lastname '${AIRFLOW_ADMIN_LASTNAME}' --role 'Admin' --email '${AIRFLOW_ADMIN_EMAIL}' || true &&
+      echo 'Creating Airflow Variable restaurant_stream_offset...' &&
+      airflow variables set restaurant_stream_offset 0 &&
+      echo 'Creating Airflow Connection postgres_restaurant...' &&
+      airflow connections add 'postgres_restaurant' --conn-type postgres --conn-host postgres --conn-schema ${RESTAURANT_DB_NAME} --conn-login ${AIRFLOW_DB_USER} --conn-password ${AIRFLOW_DB_PASSWORD} --conn-port 5432 || true &&
+      echo 'Creating Airflow Connection postgres_analytics_readonly...' &&
+      airflow connections add 'postgres_analytics_readonly' --conn-type postgres --conn-host postgres --conn-schema ${RESTAURANT_DB_NAME} --conn-login ${ANALYTICS_READONLY_USER} --conn-password ${ANALYTICS_READONLY_PASSWORD} --conn-port 5432 || true
       "
 
   # Airflow web server
