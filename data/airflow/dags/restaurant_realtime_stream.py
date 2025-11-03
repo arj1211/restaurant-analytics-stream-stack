@@ -177,7 +177,9 @@ dag = DAG(
     "restaurant_realtime_stream",
     default_args=default_args,
     description="Real-time restaurant analytics stream processing with SSE",
-    schedule_interval=None,  # Triggered externally or continuously running
+    schedule_interval=timedelta(
+        minutes=1
+    ),  # Triggered externally or continuously running
     tags=["restaurant", "streaming", "realtime", "sse"],
     max_active_runs=1,
     is_paused_upon_creation=False,
