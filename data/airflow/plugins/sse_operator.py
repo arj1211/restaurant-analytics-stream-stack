@@ -9,7 +9,7 @@ It replaces the traditional polling approach with continuous stream consumption.
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -58,7 +58,7 @@ class SSEStreamOperator(BaseOperator):
         """Execute the SSE streaming operator."""
         self.logger.info(f"Starting SSE stream consumption from {self.sse_url}")
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         events_processed = 0
         events_batch = []
 
@@ -80,7 +80,7 @@ class SSEStreamOperator(BaseOperator):
                 for line in response.iter_lines(decode_unicode=True):
                     # Check timeout
                     if (
-                        datetime.utcnow() - start_time
+                        datetime.now(timezone.utc) - start_time
                     ).total_seconds() > self.timeout_seconds:
                         self.logger.info(
                             f"Timeout reached after {self.timeout_seconds} seconds"
@@ -114,7 +114,7 @@ class SSEStreamOperator(BaseOperator):
         except Exception as e:
             raise AirflowException(f"Error processing SSE stream: {str(e)}")
 
-        execution_time = (datetime.utcnow() - start_time).total_seconds()
+        execution_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         result = {
             "events_processed": events_processed,
