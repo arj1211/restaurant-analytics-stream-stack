@@ -145,7 +145,13 @@ CREATE TABLE IF NOT EXISTS analytics.audit_log
 COMMENT ON TABLE analytics.audit_log IS 'Audit trail for important database operations';
 
 GRANT SELECT, INSERT ON analytics.audit_log TO "${RESTAURANT_DB_USER}";
-GRANT SELECT, INSERT ON analytics.audit_log TO "${AIRFLOW_DB_USER}";
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${AIRFLOW_DB_USER}') THEN
+    EXECUTE format('GRANT SELECT, INSERT ON analytics.audit_log TO %I', '${AIRFLOW_DB_USER}');
+  END IF;
+END
+$$ LANGUAGE plpgsql;
 GRANT SELECT ON analytics.audit_log TO "${ANALYTICS_READONLY_USER}";
 
 -- Grant sequence permissions if the sequence exists (created by SERIAL)
