@@ -1,1 +1,5 @@
-.venv
+*venv
+*__pycache__
+data/airflow/logs/
+data/postgres/
+data/pgadmin/
