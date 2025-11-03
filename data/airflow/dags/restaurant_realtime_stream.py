@@ -294,8 +294,7 @@ realtime_stream_processor >> [data_quality_check, system_health_monitor]
 # Analytics refresh depends on successful stream processing
 realtime_stream_processor >> refresh_analytics_views
 
-# Cleanup runs independently (could be on a different schedule)
-cleanup_old_events
+# Note: cleanup_old_events runs independently (could be on a different schedule)
 
 # =============================================================================
 # Additional Documentation

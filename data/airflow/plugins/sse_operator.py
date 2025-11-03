@@ -8,13 +8,11 @@ It replaces the traditional polling approach with continuous stream consumption.
 
 import json
 import logging
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
 from airflow import AirflowException
-from airflow.configuration import conf
 from airflow.models import BaseOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.context import Context
