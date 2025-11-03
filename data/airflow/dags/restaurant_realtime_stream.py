@@ -182,7 +182,7 @@ dag = DAG(
     ),  # Triggered externally or continuously running
     tags=["restaurant", "streaming", "realtime", "sse"],
     max_active_runs=1,
-    is_paused_upon_creation=False,
+    is_paused_upon_creation=True,
 )
 
 # =============================================================================
