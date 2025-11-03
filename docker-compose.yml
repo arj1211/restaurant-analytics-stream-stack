@@ -174,5 +174,5 @@ services:
       start_period: 10s
     volumes:
       # Hot reload for development
-      - ./restaurant_api/app:/app:${API_HOT_RELOAD:-true}
+      - ./restaurant_api/app:/app
     restart: unless-stopped
