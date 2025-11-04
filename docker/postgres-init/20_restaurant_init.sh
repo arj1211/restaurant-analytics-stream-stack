@@ -39,7 +39,7 @@ ALTER DATABASE "${RESTAURANT_DB_NAME}" OWNER TO "${RESTAURANT_DB_USER}";
 COMMENT ON DATABASE "${RESTAURANT_DB_NAME}" IS 'Restaurant analytics application data';
 
 -- 3) Connect to the restaurant analytics database
-\\c ${RESTAURANT_DB_NAME}
+\c ${RESTAURANT_DB_NAME}
 
 -- 4) Create schemas owned by restaurant_user
 CREATE SCHEMA IF NOT EXISTS raw_data AUTHORIZATION "${RESTAURANT_DB_USER}";
@@ -145,13 +145,13 @@ CREATE TABLE IF NOT EXISTS analytics.audit_log
 COMMENT ON TABLE analytics.audit_log IS 'Audit trail for important database operations';
 
 GRANT SELECT, INSERT ON analytics.audit_log TO "${RESTAURANT_DB_USER}";
-DO $$
+DO \$\$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${AIRFLOW_DB_USER}') THEN
     EXECUTE format('GRANT SELECT, INSERT ON analytics.audit_log TO %I', '${AIRFLOW_DB_USER}');
   END IF;
 END
-$$ LANGUAGE plpgsql;
+\$\$ LANGUAGE plpgsql;
 GRANT SELECT ON analytics.audit_log TO "${ANALYTICS_READONLY_USER}";
 
 -- Grant sequence permissions if the sequence exists (created by SERIAL)

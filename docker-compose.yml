@@ -62,13 +62,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB}",
+          'pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB} && psql -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB} -tAc "SELECT 1 FROM pg_roles WHERE rolname=''${AIRFLOW_DB_USER}''" | grep -q 1 && psql -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB} -tAc "SELECT 1 FROM pg_roles WHERE rolname=''${RESTAURANT_DB_USER}''" | grep -q 1 && psql -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB} -tAc "SELECT 1 FROM pg_database WHERE datname=''${AIRFLOW_DB_NAME}''" | grep -q 1 && psql -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB} -tAc "SELECT 1 FROM pg_database WHERE datname=''${RESTAURANT_DB_NAME}''" | grep -q 1',
         ]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 10s
-    restart: unless-stopped
+      retries: 20
+      start_period: 5m
 
   # Database administration tool
   pgadmin:
@@ -100,7 +99,7 @@ services:
       [
         "bash",
         "-lc",
-        'set -euo pipefail; until pg_isready -h postgres -p 5432 -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DEFAULT_DB}; do sleep 2; done; airflow db migrate; (airflow users list | grep -q " ${AIRFLOW_ADMIN_USER} ") || airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname ${AIRFLOW_ADMIN_FIRSTNAME} --lastname ${AIRFLOW_ADMIN_LASTNAME} --role Admin --email ${AIRFLOW_ADMIN_EMAIL}; airflow connections delete postgres_restaurant || true; airflow connections add postgres_restaurant --conn-type postgres --conn-host postgres --conn-schema ${RESTAURANT_DB_NAME} --conn-login ${RESTAURANT_DB_USER} --conn-password ${RESTAURANT_DB_PASSWORD} --conn-port 5432; airflow connections delete restaurant_api || true; airflow connections add restaurant_api --conn-uri http://restaurant-api:8000; airflow variables set restaurant_stream_offset 0;',
+        'set -euo pipefail; until pg_isready -h postgres -p 5432 -U ${AIRFLOW_DB_USER} -d ${AIRFLOW_DB_NAME}; do sleep 2; done; airflow db migrate; (airflow users list | grep -q " ${AIRFLOW_ADMIN_USER} ") || airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname ${AIRFLOW_ADMIN_FIRSTNAME} --lastname ${AIRFLOW_ADMIN_LASTNAME} --role Admin --email ${AIRFLOW_ADMIN_EMAIL}; airflow connections delete postgres_restaurant || true; airflow connections add postgres_restaurant --conn-type postgres --conn-host postgres --conn-schema ${RESTAURANT_DB_NAME} --conn-login ${RESTAURANT_DB_USER} --conn-password ${RESTAURANT_DB_PASSWORD} --conn-port 5432; airflow connections delete restaurant_api || true; airflow connections add restaurant_api --conn-uri http://restaurant-api:8000; airflow variables set restaurant_stream_offset 0;',
       ]
 
   # Airflow web server
